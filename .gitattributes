@@ -1,0 +1,7 @@
+# Finales de línea LF en todos los archivos de texto, también en Windows:
+# los scripts .sh y los .py se ejecutan dentro de contenedores Linux y un
+# CRLF los rompe.
+* text=auto eol=lf
+*.docx binary
+*.pdf binary
+*.png binary
