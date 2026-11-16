@@ -45,6 +45,7 @@ LAMBDAS: dict[str, tuple[str, int, bool]] = {
     "health":     ("Health check de DynamoDB y Redis", 5, False),
     "auth":       ("Registro, login y sesiones", 10, True),
     "usuarios":   ("Perfiles de estudiantes y profesores", 10, False),
+    "cursos":     ("Cursos, ofertas y catálogo", 10, True),
 }
 
 # ── Rutas del API: (lambda, método, ruta) ──────────────────────────────
@@ -56,6 +57,12 @@ RUTAS: list[tuple[str, str, str]] = [
     ("auth",       "GET",    "/auth/me"),
     ("usuarios",   "GET",    "/estudiantes/{studentId}"),
     ("usuarios",   "GET",    "/profesores/{profesorId}"),
+    ("cursos",     "POST",   "/cursos"),
+    ("cursos",     "GET",    "/cursos/{cursoId}"),
+    ("cursos",     "POST",   "/cursos/{cursoId}/ofertas"),
+    ("cursos",     "GET",    "/periodos/{periodo}/ofertas"),
+    ("cursos",     "GET",    "/profesores/{profesorId}/ofertas"),
+    ("cursos",     "PUT",    "/ofertas/{ofertaId}/estado"),
 ]
 
 
