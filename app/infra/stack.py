@@ -46,6 +46,7 @@ LAMBDAS: dict[str, tuple[str, int, bool]] = {
     "auth":       ("Registro, login y sesiones", 10, True),
     "usuarios":   ("Perfiles de estudiantes y profesores", 10, False),
     "cursos":     ("Cursos, ofertas y catálogo", 10, True),
+    "matriculas": ("Matricular, retirar y cambiar de grupo", 10, True),
 }
 
 # ── Rutas del API: (lambda, método, ruta) ──────────────────────────────
@@ -63,6 +64,11 @@ RUTAS: list[tuple[str, str, str]] = [
     ("cursos",     "GET",    "/periodos/{periodo}/ofertas"),
     ("cursos",     "GET",    "/profesores/{profesorId}/ofertas"),
     ("cursos",     "PUT",    "/ofertas/{ofertaId}/estado"),
+    ("matriculas", "POST",   "/matriculas"),
+    ("matriculas", "GET",    "/estudiantes/{studentId}/matriculas"),
+    ("matriculas", "DELETE", "/estudiantes/{studentId}/matriculas/{periodo}/{cursoId}"),
+    ("matriculas", "PUT",    "/estudiantes/{studentId}/matriculas/{periodo}/{cursoId}/grupo"),
+    ("matriculas", "GET",    "/periodos/{periodo}/demanda"),
 ]
 
 
