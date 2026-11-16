@@ -10,4 +10,5 @@ que en ejecución se importa como `from comun import ...`.
   cache.py      Abstracción de Redis: cache-aside, sesiones, rate limiting
   http.py       Respuestas, errores y enrutador para API Gateway (proxy)
   seguridad.py  Hash de contraseñas, tokens firmados y autorización por rol
+  dominio.py    Reglas compartidas de matrícula: lecturas, permisos e invalidación
 """
