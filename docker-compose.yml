@@ -30,6 +30,8 @@ services:
       # Necesario para que las Lambdas resuelvan redis dentro de la red.
       # Debe coincidir con <name del proyecto>_default (ver arriba).
       LAMBDA_DOCKER_NETWORK: gestion_academica_default
+      # El frontend de la demo llama al API desde otro origen
+      EXTRA_CORS_ALLOWED_ORIGINS: "http://localhost:${PUERTO_FRONTEND:-8080}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./emulador-data:/var/lib/localstack
@@ -76,6 +78,8 @@ services:
     container_name: cdk-dev
     volumes:
       - ./app:/app
+      # El script de datos iniciales escribe aquí la URL del API (config.js)
+      - ./frontend:/frontend
     working_dir: /app
     depends_on:
       emulador:
@@ -100,10 +104,26 @@ services:
       SESION_TTL: ${SESION_TTL:-3600}
       # TTL (s) de las respuestas que muestran cupos: catálogo, curso, ofertas
       TTL_CUPOS: ${TTL_CUPOS:-15}
+      # Datos para que seed.py arme la URL del API que usará el navegador
+      FRONTEND_DIR: /frontend
+      PUERTO_EMULADOR: ${PUERTO_EMULADOR:-4566}
     # Se mantiene vivo para que puedas entrar con `docker compose exec cdk-dev bash`
     stdin_open: true
     tty: true
     command: bash
+
+  # ─────────────────────────────────────────────────────────────────────
+  # CONTENEDOR 4: Frontend de la demo (HTML estático)
+  # No es parte de la arquitectura evaluada: solo sirve la página que
+  # consume el API para la sustentación.  http://localhost:8080
+  # ─────────────────────────────────────────────────────────────────────
+  frontend:
+    image: nginx:1.27-alpine
+    container_name: frontend
+    ports:
+      - "${PUERTO_FRONTEND:-8080}:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
 
 volumes:
   redis_data:
