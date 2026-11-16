@@ -53,3 +53,11 @@ La versión vigente es [diseno-dynamodb-gestion-academica.md](diseno-dynamodb-ge
 - **Modo degradado explícito:** tabla de qué hace cada función con Redis caído, timeout de 0.5 s y circuit breaker de 15 s (Diseño §7).
 - **`GET /health`:** con Redis caído responde `200` y `estado: "degradado"`; `503` solo si falla DynamoDB. En el proyecto base cualquiera de los dos devolvía `503`.
 - **Numeración de patrones:** se conservan los números 1–12 de la v1; las escrituras nuevas son los patrones 13–18.
+
+## Hallazgos en el proyecto base del docente
+
+No son parte del diseño, pero habrían roto el despliegue:
+
+1. **`LAMBDA_DOCKER_NETWORK: bd_no_sql_default` dependía del nombre de la carpeta.** Compose nombra la red según la carpeta del proyecto; clonado como `gestion_academica`, la red se llamaría distinto y las Lambdas no resolverían `redis`. Se fijó `name: gestion_academica` en `docker-compose.yml`.
+2. **`.env.example` aparecía en la estructura pero no existía.** Se agregó.
+3. **Código compartido entre Lambdas.** El empaquetado del proyecto base copiaba una sola carpeta por Lambda. Se extendió para incluir `lambdas/comun/` en cada paquete. Al hacerlo apareció un detalle de CDK: los assets con el mismo origen y las mismas opciones de bundling se reutilizan, así que todas las Lambdas recibían el código de la primera. Cada Lambda usa ahora su propia carpeta como origen (`infra/stack.py`, `_codigo_lambda`).
