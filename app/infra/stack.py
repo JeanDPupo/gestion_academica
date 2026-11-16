@@ -44,6 +44,7 @@ ES_LOCAL: bool = "AWS_ENDPOINT_URL" in os.environ
 LAMBDAS: dict[str, tuple[str, int, bool]] = {
     "health":     ("Health check de DynamoDB y Redis", 5, False),
     "auth":       ("Registro, login y sesiones", 10, True),
+    "usuarios":   ("Perfiles de estudiantes y profesores", 10, False),
 }
 
 # ── Rutas del API: (lambda, método, ruta) ──────────────────────────────
@@ -53,6 +54,8 @@ RUTAS: list[tuple[str, str, str]] = [
     ("auth",       "POST",   "/auth/login"),
     ("auth",       "POST",   "/auth/logout"),
     ("auth",       "GET",    "/auth/me"),
+    ("usuarios",   "GET",    "/estudiantes/{studentId}"),
+    ("usuarios",   "GET",    "/profesores/{profesorId}"),
 ]
 
 
