@@ -16,9 +16,9 @@ import os
 from typing import Any, TypeAlias
 
 import boto3
-import redis
 from botocore.exceptions import ClientError
 
+from comun import cache
 from comun.http import Evento, RespuestaApi, respuesta
 
 # Estado de un componente: {"estado": "ok" | "error", ...}
@@ -43,17 +43,11 @@ def _check_dynamodb() -> EstadoComponente:
 
 def _check_redis() -> EstadoComponente:
     host: str = os.environ.get("REDIS_HOST", "redis")
-    try:
-        cliente: redis.Redis = redis.Redis(
-            host=host,
-            port=int(os.environ.get("REDIS_PORT", 6379)),
-            decode_responses=True,
-            socket_connect_timeout=2,
-        )
-        cliente.ping()
+    # cache.ping() usa la resolución DNS acotada del módulo común; con
+    # Redis caído responde en ~1 s en vez de colgar la Lambda.
+    if cache.ping():
         return {"estado": "ok", "host": host}
-    except redis.RedisError as e:
-        return {"estado": "error", "detalle": str(e)}
+    return {"estado": "error", "detalle": f"sin respuesta de Redis ({host})"}
 
 
 def main(event: Evento, context: Any) -> RespuestaApi:
