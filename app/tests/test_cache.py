@@ -173,3 +173,72 @@ def test_circuit_breaker_omite_redis_tras_un_fallo(monkeypatch):
     cache.reiniciar_circuito()        # equivale a que pase REDIS_PAUSA_FALLO
     cache.cache_get("d")
     assert intentos == ["a", "d"]
+
+
+# ── Resolución DNS acotada ────────────────────────────────────────────
+#
+# Con Redis caído, Docker reenvía el nombre a DNS externos y la
+# resolución puede tardar más que el timeout de la Lambda; redis-py
+# además reintenta el connect. _ip_de acota ambos caminos.
+
+def test_ip_de_resuelve_y_cachear(monkeypatch):
+    import time
+    llamadas = []
+
+    def resolver_ok(host):
+        llamadas.append(host)
+        return "172.20.0.9"
+
+    monkeypatch.setattr(cache.socket, "gethostbyname", resolver_ok)
+    monkeypatch.setattr(cache, "_ip_cacheada", None)
+    assert cache._ip_de("redis") == "172.20.0.9"
+    assert cache._ip_de("redis") == "172.20.0.9"
+    assert llamadas == ["redis"]           # la segunda salió de la caché
+
+
+def test_ip_de_no_se_cuelga_si_el_dns_no_responde(monkeypatch):
+    """El techo de resolución manda: falla en ~1 s aunque el DNS tardé más."""
+    import time
+
+    def resolver_lento(host):
+        time.sleep(5)                      # mucho más que TECHO_RESOLVER_S
+        return "10.9.8.7"
+
+    monkeypatch.setattr(cache.socket, "gethostbyname", resolver_lento)
+    monkeypatch.setattr(cache, "_ip_cacheada", None)
+    t0 = time.monotonic()
+    try:
+        cache._ip_de("redis")
+        raise AssertionError("debió lanzar ConnectionError")
+    except cache.redis.ConnectionError:
+        pass
+    assert time.monotonic() - t0 < 3
+
+
+def test_ip_de_convierte_dns_roto_en_connection_error(monkeypatch):
+    import socket
+
+    def resolver_roto(host):
+        raise socket.gaierror(8, "nombre no resuelto")
+
+    monkeypatch.setattr(cache.socket, "gethostbyname", resolver_roto)
+    monkeypatch.setattr(cache, "_ip_cacheada", None)
+    try:
+        cache._ip_de("redis")
+        raise AssertionError("debió lanzar ConnectionError")
+    except cache.redis.ConnectionError:
+        pass
+
+
+def test_fallo_descarta_cliente_e_ip_para_re_resolver():
+    import time
+    cache._cliente = object()
+    cache._ip_cacheada = ("redis", "10.0.0.5", time.monotonic() + 60)
+    cache._registrar_fallo("get", Exception("sin conexión"))
+    assert cache._cliente is None
+    assert cache._ip_cacheada is None
+
+
+def test_ping_sonda_reporta_false_sin_abrir_el_circuito(redis_caido):
+    assert cache.ping() is False
+    assert cache._disponible()             # el breaker queda cerrado

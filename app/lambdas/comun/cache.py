@@ -21,14 +21,25 @@ Circuit breaker
   REDIS_PAUSA_FALLO segundos. Sin esto, una petición que hace varias
   operaciones de caché pagaría el timeout de conexión una vez por
   operación mientras Redis esté caído.
+
+Resolución DNS acotada
+  socket_connect_timeout no acota la resolución DNS: con Redis caído,
+  Docker reenvía el nombre "redis" a los DNS externos y la resolución
+  puede tardar varios segundos (más que el timeout de la Lambda), y
+  redis-py además reintenta el connect. Por eso el cliente se crea con
+  la IP resuelva aquí mismo, con un techo de tiempo, y sin reintentos.
 """
 import json
 import logging
 import os
+import socket
+import threading
 import time
 from typing import Any, Callable, cast
 
 import redis
+from redis.backoff import NoBackoff
+from redis.retry import Retry
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -38,9 +49,49 @@ _NEGATIVO: dict[str, bool] = {"__negativo__": True}
 FUENTE_CACHE: str = "cache"
 FUENTE_DYNAMODB: str = "dynamodb"
 
+# Techo de la resolución DNS (ver docstring del módulo)
+TECHO_RESOLVER_S: float = 1.0
+# La IP resuelta se reusa este tiempo; si el contenedor cambia de IP
+# (recreado, no reiniciado) el cliente se descarta al primer fallo.
+TTL_IP_S: float = 60.0
+
 _cliente: redis.Redis | None = None
 # Instante (time.monotonic) hasta el cual no se intenta hablar con Redis
 _pausado_hasta: float = 0.0
+# (host, ip, instante hasta el cual la IP se considera vigente)
+_ip_cacheada: tuple[str, str, float] | None = None
+
+
+def _ip_de(host: str) -> str:
+    """
+    Resuelve `host` a IP con un techo de TECHO_RESOLVER_S segundos.
+    Lanza redis.ConnectionError si no resuelve a tiempo, de modo que
+    las llamadas caen en el camino ya previsto de Redis no disponible.
+    """
+    global _ip_cacheada
+    ahora: float = time.monotonic()
+    if _ip_cacheada and _ip_cacheada[0] == host and ahora < _ip_cacheada[2]:
+        return _ip_cacheada[1]
+
+    resultado: dict[str, str] = {}
+
+    def _resolver() -> None:
+        try:
+            resultado["ip"] = socket.gethostbyname(host)
+        except OSError:
+            pass    # se reporta como ConnectionError abajo
+
+    hilo = threading.Thread(target=_resolver, daemon=True)
+    hilo.start()
+    hilo.join(TECHO_RESOLVER_S)
+
+    ip: str | None = resultado.get("ip")
+    if not ip:
+        raise redis.ConnectionError(
+            f"no se resolvio {host} en {TECHO_RESOLVER_S:.0f}s"
+        )
+    _ip_cacheada = (host, ip, ahora + TTL_IP_S)
+    return ip
 
 
 def _get_client() -> redis.Redis:
@@ -52,13 +103,32 @@ def _get_client() -> redis.Redis:
     global _cliente
     if _cliente is None:
         _cliente = redis.Redis(
-            host=os.environ.get("REDIS_HOST", "redis"),
+            # La IP, no el nombre: redis-py resuelve DNS (sin techo) en
+            # cada reconexión del pool, dentro del timeout de la Lambda.
+            host=_ip_de(os.environ.get("REDIS_HOST", "redis")),
             port=int(os.environ.get("REDIS_PORT", 6379)),
             decode_responses=True,          # retorna str en lugar de bytes
             socket_connect_timeout=0.5,
             socket_timeout=0.5,
+            retry=Retry(NoBackoff(), 0),    # sin reintentos internos
         )
     return _cliente
+
+
+def ping() -> bool:
+    """
+    Sonda directa: True si Redis responde a PING en menos de ~1.5 s.
+    No usa el circuit breaker ni lo abre: es para el /health, que debe
+    reflejar el estado real aunque las peticiones estén en pausa.
+    """
+    global _cliente, _ip_cacheada
+    try:
+        _get_client().ping()
+        return True
+    except redis.RedisError:
+        _cliente = None
+        _ip_cacheada = None
+        return False
 
 
 def _ttl_por_defecto() -> int:
@@ -72,9 +142,13 @@ def _disponible() -> bool:
 
 
 def _registrar_fallo(operacion: str, error: Exception) -> None:
-    global _pausado_hasta
+    global _pausado_hasta, _cliente, _ip_cacheada
     pausa: float = float(os.environ.get("REDIS_PAUSA_FALLO", 15))
     _pausado_hasta = time.monotonic() + pausa
+    # Se descarta el cliente y la IP resuelta: si Redis cambió de IP o
+    # volvió a estar disponible, el siguiente intento re-resuelve.
+    _cliente = None
+    _ip_cacheada = None
     logger.warning("Redis no disponible (%s): %s — se omite %.0fs", operacion, error, pausa)
 
 
