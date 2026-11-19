@@ -139,11 +139,7 @@ Para agregar un endpoint: una fila en `RUTAS` (`infra/stack.py`) y una función 
 
 | Documento | Contenido |
 |-----------|-----------|
-| [docs/diseno-dynamodb-gestion-academica.md](docs/diseno-dynamodb-gestion-academica.md) | Documento de diseño: patrones de acceso, modelo de tabla, llaves, flujos y patrones de Redis |
-| [docs/revision-diseno.md](docs/revision-diseno.md) | Qué cambió frente a la primera versión del diseño y por qué |
 | [docs/api.md](docs/api.md) | Los 23 endpoints: acceso, operación de DynamoDB, uso de Redis y ejemplos con curl |
-| [docs/guia-sustentacion.md](docs/guia-sustentacion.md) | Guion de la demo, lista de verificación y preguntas probables |
-| [docs/specs/](docs/specs/README.md) | Una spec y un plan por cada entrega, con su rama |
 | [docs/referencia/](docs/referencia/) | Currículo y proyecto base entregados por el docente |
 
 ## Estado de la verificación
@@ -155,4 +151,3 @@ Para agregar un endpoint: una fila en `RUTAS` (`infra/stack.py`) y una función 
 | Paquete de cada Lambda | Importado de forma aislada desde `cdk.out` |
 | API de punta a punta por HTTP | `seed.py` contra el servidor de simulación |
 | Frontend | Recorrido automatizado de los tres roles en navegador |
-| **Despliegue en LocalStack** | **Pendiente: no se ejecutó en un equipo con Docker.** Es lo primero que hay que correr; ver la lista de verificación en la guía de sustentación |
