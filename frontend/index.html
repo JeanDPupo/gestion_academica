@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gestión Académica — demo</title>
-<!--
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gestión Académica — demo</title>
+    <!--
   Frontend de la demo. Una sola página, sin dependencias externas
   (funciona sin internet). Consume el API desplegado en API Gateway.
 
@@ -15,574 +15,1510 @@
   El panel "Traza" muestra cada petición con su código HTTP, su duración
   y de dónde salió la respuesta (_fuente): caché (Redis) o DynamoDB.
 -->
-<script src="config.js" onerror="void 0"></script>
-<style>
-  :root {
-    --papel: #f5f3ee; --tarjeta: #ffffff; --tinta: #1b2330; --tenue: #5d6675;
-    --linea: #dcd8cf; --acento: #0f5c4c; --acento-suave: #e3efec;
-    --cache: #9a4a06; --cache-fondo: #fdecc8;
-    --dynamo: #2f3a9e; --dynamo-fondo: #e1e5fb;
-    --error: #a3231d; --error-fondo: #fbe3e1;
-    --ok: #1d6b3a; --ok-fondo: #dff3e4;
-    --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--papel); color: var(--tinta);
-    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  }
-  header {
-    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
-    padding: 12px 24px; background: var(--tinta); color: #fff;
-  }
-  header h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: .2px; }
-  header .sub { color: #aab3c2; font-size: 13px; }
-  header .espacio { flex: 1; }
-  header select, header button {
-    font: inherit; font-size: 13px; padding: 5px 10px; border-radius: 6px;
-    border: 1px solid #45506a; background: #263043; color: #fff;
-  }
-  header button { cursor: pointer; }
-  .pildora {
-    font: 12px var(--mono); padding: 3px 9px; border-radius: 999px;
-    background: #263043; color: #cfd6e2; white-space: nowrap;
-  }
-  .pildora.ok { background: #1f4d3a; color: #c8f1dc; }
-  .pildora.mal { background: #6b2320; color: #ffd9d6; }
-  .aviso-simulacion {
-    background: var(--cache-fondo); color: var(--cache); font-size: 13px;
-    padding: 6px 24px; border-bottom: 1px solid #f0d290;
-  }
-  main {
-    display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 20px;
-    padding: 20px 24px; align-items: start; max-width: 1500px; margin: 0 auto;
-  }
-  @media (max-width: 1050px) { main { grid-template-columns: 1fr; } }
-  .tarjeta {
-    background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 10px;
-    padding: 18px 20px; margin-bottom: 16px;
-  }
-  h2 { font-size: 16px; margin: 0 0 4px; }
-  .nota-seccion { color: var(--tenue); font-size: 13px; margin: 0 0 12px; }
-  .nota-seccion code, td code, .traza code {
-    font: 12px var(--mono); background: #efece5; padding: 1px 5px; border-radius: 4px;
-  }
-  nav.pestanas { display: flex; gap: 4px; margin-bottom: 14px; flex-wrap: wrap; }
-  nav.pestanas button {
-    font: inherit; font-size: 14px; padding: 7px 14px; border-radius: 8px; cursor: pointer;
-    border: 1px solid var(--linea); background: var(--tarjeta); color: var(--tenue);
-  }
-  nav.pestanas button.activa {
-    background: var(--acento); border-color: var(--acento); color: #fff; font-weight: 600;
-  }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th {
-    text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .5px;
-    color: var(--tenue); padding: 6px 8px; border-bottom: 2px solid var(--linea);
-  }
-  td { padding: 8px; border-bottom: 1px solid #ece9e2; vertical-align: middle; }
-  tr:last-child td { border-bottom: 0; }
-  td.num { font-family: var(--mono); font-size: 13px; white-space: nowrap; }
-  .vacio { color: var(--tenue); padding: 14px 4px; font-size: 14px; }
-  button.accion, .formulario button {
-    font: inherit; font-size: 13px; padding: 5px 11px; border-radius: 6px; cursor: pointer;
-    border: 1px solid var(--acento); background: var(--acento); color: #fff;
-  }
-  button.accion.secundaria { background: #fff; color: var(--acento); }
-  button.accion.peligro { background: #fff; color: var(--error); border-color: #d9a7a3; }
-  button:disabled { opacity: .45; cursor: not-allowed; }
-  button:focus-visible, input:focus-visible, select:focus-visible {
-    outline: 2px solid var(--acento); outline-offset: 2px;
-  }
-  .etiqueta {
-    display: inline-block; font: 600 11px var(--mono); padding: 2px 7px; border-radius: 4px;
-    letter-spacing: .3px; white-space: nowrap;
-  }
-  .etiqueta.cache { background: var(--cache-fondo); color: var(--cache); }
-  .etiqueta.dynamodb { background: var(--dynamo-fondo); color: var(--dynamo); }
-  .etiqueta.redis { background: var(--cache-fondo); color: var(--cache); }
-  .etiqueta.PENDIENTE { background: var(--cache-fondo); color: var(--cache); }
-  .etiqueta.APROBADA, .etiqueta.ACTIVA { background: var(--ok-fondo); color: var(--ok); }
-  .etiqueta.CERRADA, .etiqueta.error { background: var(--error-fondo); color: var(--error); }
-  .formulario { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; align-items: end; }
-  .formulario label { display: block; font-size: 12px; color: var(--tenue); }
-  .formulario input, .formulario select, td input, td select {
-    width: 100%; font: inherit; font-size: 14px; padding: 6px 8px; margin-top: 3px;
-    border: 1px solid #c9c4b8; border-radius: 6px; background: #fff; color: var(--tinta);
-  }
-  td input.nota { width: 72px; }
-  .cuentas { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 14px; }
-  .mensaje { padding: 9px 12px; border-radius: 8px; font-size: 14px; margin-bottom: 12px; }
-  .mensaje.ok { background: var(--ok-fondo); color: var(--ok); }
-  .mensaje.error { background: var(--error-fondo); color: var(--error); }
-  .cupos { display: flex; align-items: center; gap: 8px; }
-  .cupos .barra { width: 56px; height: 6px; background: #e6e2d9; border-radius: 3px; overflow: hidden; }
-  .cupos .barra i { display: block; height: 100%; background: var(--acento); }
-  .cupos.lleno .barra i { background: var(--error); }
-  .ranking .fila { display: grid; grid-template-columns: 28px 90px 1fr 40px; gap: 10px; align-items: center; padding: 5px 0; }
-  .ranking .barra { height: 14px; background: var(--acento-suave); border-radius: 3px; }
-  .ranking .barra i { display: block; height: 100%; background: var(--acento); border-radius: 3px; }
-  /* Traza */
-  aside { position: sticky; top: 16px; }
-  .traza-cabecera { display: flex; align-items: baseline; gap: 10px; }
-  .traza-cabecera button { margin-left: auto; font: inherit; font-size: 12px; background: none; border: 0; color: var(--tenue); cursor: pointer; text-decoration: underline; }
-  .contadores { display: flex; gap: 8px; margin: 8px 0 10px; flex-wrap: wrap; }
-  .traza { list-style: none; margin: 0; padding: 0; max-height: 68vh; overflow: auto; }
-  .traza li { padding: 8px 0; border-top: 1px solid #ece9e2; font-size: 13px; }
-  .traza .linea { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-  .traza .metodo { font: 600 12px var(--mono); width: 52px; }
-  .traza .ruta { font: 12px var(--mono); word-break: break-all; flex: 1; min-width: 150px; }
-  .traza .ms { font: 12px var(--mono); color: var(--tenue); }
-  .traza .detalle { color: var(--tenue); font-size: 12px; margin-top: 3px; }
-  .traza .status { font: 600 12px var(--mono); }
-  .traza .status.s2 { color: var(--ok); } .traza .status.s4, .traza .status.s5 { color: var(--error); }
-</style>
-</head>
-<body>
-<header>
-  <div>
-    <h1>Gestión Académica</h1>
-    <div class="sub">DynamoDB (Single Table) + Redis + Lambda + API Gateway</div>
-  </div>
-  <span class="espacio"></span>
-  <span class="pildora" id="salud-dynamo">DynamoDB …</span>
-  <span class="pildora" id="salud-redis">Redis …</span>
-  <label class="sub">Periodo
-    <select id="periodo" aria-label="Periodo académico">
-      <option>2026-1</option><option>2025-2</option><option>2026-2</option>
-    </select>
-  </label>
-  <span class="sub" id="usuario"></span>
-  <button id="salir" hidden>Cerrar sesión</button>
-</header>
-<div class="aviso-simulacion" id="aviso-simulacion" hidden>
-  Modo simulación: DynamoDB y Redis en memoria (moto + fakeredis), sin Docker. Los handlers son los mismos del despliegue.
-</div>
-
-<main>
-  <section id="contenido" aria-live="polite"></section>
-  <aside class="tarjeta">
-    <div class="traza-cabecera">
-      <h2>Traza de peticiones</h2>
-      <button id="limpiar-traza">limpiar</button>
+    <script src="config.js" onerror="void 0"></script>
+    <style>
+      :root {
+        --papel: #f5f3ee;
+        --tarjeta: #ffffff;
+        --tinta: #1b2330;
+        --tenue: #5d6675;
+        --linea: #dcd8cf;
+        --acento: #0f5c4c;
+        --acento-suave: #e3efec;
+        --cache: #9a4a06;
+        --cache-fondo: #fdecc8;
+        --dynamo: #2f3a9e;
+        --dynamo-fondo: #e1e5fb;
+        --error: #a3231d;
+        --error-fondo: #fbe3e1;
+        --ok: #1d6b3a;
+        --ok-fondo: #dff3e4;
+        --mono:
+          ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--papel);
+        color: var(--tinta);
+        font:
+          15px/1.45 system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+        padding: 12px 24px;
+        background: var(--tinta);
+        color: #fff;
+      }
+      header h1 {
+        font-size: 17px;
+        margin: 0;
+        font-weight: 650;
+        letter-spacing: 0.2px;
+      }
+      header .sub {
+        color: #aab3c2;
+        font-size: 13px;
+      }
+      header .espacio {
+        flex: 1;
+      }
+      header select,
+      header button {
+        font: inherit;
+        font-size: 13px;
+        padding: 5px 10px;
+        border-radius: 6px;
+        border: 1px solid #45506a;
+        background: #263043;
+        color: #fff;
+      }
+      header button {
+        cursor: pointer;
+      }
+      .pildora {
+        font: 12px var(--mono);
+        padding: 3px 9px;
+        border-radius: 999px;
+        background: #263043;
+        color: #cfd6e2;
+        white-space: nowrap;
+      }
+      .pildora.ok {
+        background: #1f4d3a;
+        color: #c8f1dc;
+      }
+      .pildora.mal {
+        background: #6b2320;
+        color: #ffd9d6;
+      }
+      .aviso-simulacion {
+        background: var(--cache-fondo);
+        color: var(--cache);
+        font-size: 13px;
+        padding: 6px 24px;
+        border-bottom: 1px solid #f0d290;
+      }
+      main {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 400px;
+        gap: 20px;
+        padding: 20px 24px;
+        align-items: start;
+        max-width: 1500px;
+        margin: 0 auto;
+      }
+      @media (max-width: 1050px) {
+        main {
+          grid-template-columns: 1fr;
+        }
+      }
+      .tarjeta {
+        background: var(--tarjeta);
+        border: 1px solid var(--linea);
+        border-radius: 10px;
+        padding: 18px 20px;
+        margin-bottom: 16px;
+      }
+      h2 {
+        font-size: 16px;
+        margin: 0 0 4px;
+      }
+      .nota-seccion {
+        color: var(--tenue);
+        font-size: 13px;
+        margin: 0 0 12px;
+      }
+      .nota-seccion code,
+      td code,
+      .traza code {
+        font: 12px var(--mono);
+        background: #efece5;
+        padding: 1px 5px;
+        border-radius: 4px;
+      }
+      nav.pestanas {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 14px;
+        flex-wrap: wrap;
+      }
+      nav.pestanas button {
+        font: inherit;
+        font-size: 14px;
+        padding: 7px 14px;
+        border-radius: 8px;
+        cursor: pointer;
+        border: 1px solid var(--linea);
+        background: var(--tarjeta);
+        color: var(--tenue);
+      }
+      nav.pestanas button.activa {
+        background: var(--acento);
+        border-color: var(--acento);
+        color: #fff;
+        font-weight: 600;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th {
+        text-align: left;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--tenue);
+        padding: 6px 8px;
+        border-bottom: 2px solid var(--linea);
+      }
+      td {
+        padding: 8px;
+        border-bottom: 1px solid #ece9e2;
+        vertical-align: middle;
+      }
+      tr:last-child td {
+        border-bottom: 0;
+      }
+      td.num {
+        font-family: var(--mono);
+        font-size: 13px;
+        white-space: nowrap;
+      }
+      .vacio {
+        color: var(--tenue);
+        padding: 14px 4px;
+        font-size: 14px;
+      }
+      button.accion,
+      .formulario button {
+        font: inherit;
+        font-size: 13px;
+        padding: 5px 11px;
+        border-radius: 6px;
+        cursor: pointer;
+        border: 1px solid var(--acento);
+        background: var(--acento);
+        color: #fff;
+      }
+      button.accion.secundaria {
+        background: #fff;
+        color: var(--acento);
+      }
+      button.accion.peligro {
+        background: #fff;
+        color: var(--error);
+        border-color: #d9a7a3;
+      }
+      button:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible {
+        outline: 2px solid var(--acento);
+        outline-offset: 2px;
+      }
+      .etiqueta {
+        display: inline-block;
+        font: 600 11px var(--mono);
+        padding: 2px 7px;
+        border-radius: 4px;
+        letter-spacing: 0.3px;
+        white-space: nowrap;
+      }
+      .etiqueta.cache {
+        background: var(--cache-fondo);
+        color: var(--cache);
+      }
+      .etiqueta.dynamodb {
+        background: var(--dynamo-fondo);
+        color: var(--dynamo);
+      }
+      .etiqueta.redis {
+        background: var(--cache-fondo);
+        color: var(--cache);
+      }
+      .etiqueta.PENDIENTE {
+        background: var(--cache-fondo);
+        color: var(--cache);
+      }
+      .etiqueta.APROBADA,
+      .etiqueta.ACTIVA {
+        background: var(--ok-fondo);
+        color: var(--ok);
+      }
+      .etiqueta.CERRADA,
+      .etiqueta.error {
+        background: var(--error-fondo);
+        color: var(--error);
+      }
+      .formulario {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 10px;
+        align-items: end;
+      }
+      .formulario label {
+        display: block;
+        font-size: 12px;
+        color: var(--tenue);
+      }
+      .formulario input,
+      .formulario select,
+      td input,
+      td select {
+        width: 100%;
+        font: inherit;
+        font-size: 14px;
+        padding: 6px 8px;
+        margin-top: 3px;
+        border: 1px solid #c9c4b8;
+        border-radius: 6px;
+        background: #fff;
+        color: var(--tinta);
+      }
+      td input.nota {
+        width: 72px;
+      }
+      .cuentas {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 10px 0 14px;
+      }
+      .mensaje {
+        padding: 9px 12px;
+        border-radius: 8px;
+        font-size: 14px;
+        margin-bottom: 12px;
+      }
+      .mensaje.ok {
+        background: var(--ok-fondo);
+        color: var(--ok);
+      }
+      .mensaje.error {
+        background: var(--error-fondo);
+        color: var(--error);
+      }
+      .cupos {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .cupos .barra {
+        width: 56px;
+        height: 6px;
+        background: #e6e2d9;
+        border-radius: 3px;
+        overflow: hidden;
+      }
+      .cupos .barra i {
+        display: block;
+        height: 100%;
+        background: var(--acento);
+      }
+      .cupos.lleno .barra i {
+        background: var(--error);
+      }
+      .ranking .fila {
+        display: grid;
+        grid-template-columns: 28px 90px 1fr 40px;
+        gap: 10px;
+        align-items: center;
+        padding: 5px 0;
+      }
+      .ranking .barra {
+        height: 14px;
+        background: var(--acento-suave);
+        border-radius: 3px;
+      }
+      .ranking .barra i {
+        display: block;
+        height: 100%;
+        background: var(--acento);
+        border-radius: 3px;
+      }
+      /* Traza */
+      aside {
+        position: sticky;
+        top: 16px;
+      }
+      .traza-cabecera {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+      }
+      .traza-cabecera button {
+        margin-left: auto;
+        font: inherit;
+        font-size: 12px;
+        background: none;
+        border: 0;
+        color: var(--tenue);
+        cursor: pointer;
+        text-decoration: underline;
+      }
+      .contadores {
+        display: flex;
+        gap: 8px;
+        margin: 8px 0 10px;
+        flex-wrap: wrap;
+      }
+      .traza {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        max-height: 68vh;
+        overflow: auto;
+      }
+      .traza li {
+        padding: 8px 0;
+        border-top: 1px solid #ece9e2;
+        font-size: 13px;
+      }
+      .traza .linea {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .traza .metodo {
+        font: 600 12px var(--mono);
+        width: 52px;
+      }
+      .traza .ruta {
+        font: 12px var(--mono);
+        word-break: break-all;
+        flex: 1;
+        min-width: 150px;
+      }
+      .traza .ms {
+        font: 12px var(--mono);
+        color: var(--tenue);
+      }
+      .traza .detalle {
+        color: var(--tenue);
+        font-size: 12px;
+        margin-top: 3px;
+      }
+      .traza .status {
+        font: 600 12px var(--mono);
+      }
+      .traza .status.s2 {
+        color: var(--ok);
+      }
+      .traza .status.s4,
+      .traza .status.s5 {
+        color: var(--error);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>Gestión Académica</h1>
+        <div class="sub">
+          DynamoDB (Single Table) + Redis + Lambda + API Gateway
+        </div>
+      </div>
+      <span class="espacio"></span>
+      <span class="pildora" id="salud-dynamo">DynamoDB …</span>
+      <span class="pildora" id="salud-redis">Redis …</span>
+      <label class="sub"
+        >Periodo
+        <select id="periodo" aria-label="Periodo académico">
+          <option>2026-1</option>
+          <option>2025-2</option>
+          <option>2026-2</option>
+        </select>
+      </label>
+      <span class="sub" id="usuario"></span>
+      <button id="salir" hidden>Cerrar sesión</button>
+    </header>
+    <div class="aviso-simulacion" id="aviso-simulacion" hidden>
+      Modo simulación: DynamoDB y Redis en memoria (moto + fakeredis), sin
+      Docker. Los handlers son los mismos del despliegue.
     </div>
-    <p class="nota-seccion">Cada llamada al API y de dónde salió la respuesta.</p>
-    <div class="contadores">
-      <span class="etiqueta cache" id="cuenta-cache">caché 0</span>
-      <span class="etiqueta dynamodb" id="cuenta-dynamo">dynamodb 0</span>
-      <span class="etiqueta error" id="cuenta-error">errores 0</span>
-    </div>
-    <ul class="traza" id="traza"></ul>
-  </aside>
-</main>
 
-<script>
-"use strict";
+    <main>
+      <section id="contenido" aria-live="polite"></section>
+      <aside class="tarjeta">
+        <div class="traza-cabecera">
+          <h2>Traza de peticiones</h2>
+          <button id="limpiar-traza">limpiar</button>
+        </div>
+        <p class="nota-seccion">
+          Cada llamada al API y de dónde salió la respuesta.
+        </p>
+        <div class="contadores">
+          <span class="etiqueta cache" id="cuenta-cache">caché 0</span>
+          <span class="etiqueta dynamodb" id="cuenta-dynamo">dynamodb 0</span>
+          <span class="etiqueta error" id="cuenta-error">errores 0</span>
+        </div>
+        <ul class="traza" id="traza"></ul>
+      </aside>
+    </main>
 
-// ── Estado ────────────────────────────────────────────────────────────
-const estado = {
-  api: (window.API_BASE || leerLocal("api_base") || "").replace(/\/$/, ""),
-  token: leerLocal("token"),
-  usuario: JSON.parse(leerLocal("usuario") || "null"),
-  pestana: null,
-  ofertaAbierta: null,
-  mensaje: null,
-  cuentas: { cache: 0, dynamodb: 0, error: 0 },
-};
-const CLAVE_DEMO = "Demo2026*";
-const CUENTAS_DEMO = [
-  ["Coordinación", "coordinacion@campus.example"],
-  ["Profesor · Luis Mendoza", "luis.mendoza@campus.example"],
-  ["Profesora · Nora Salas", "nora.salas@campus.example"],
-  ["Estudiante · Ana Pérez", "ana.perez@campus.example"],
-  ["Estudiante · Daniel Rojas", "daniel.rojas@campus.example"],
-];
+    <script>
+      "use strict";
 
-// localStorage puede no estar disponible: se usa solo como comodidad
-function leerLocal(clave) { try { return localStorage.getItem("ga_" + clave); } catch (e) { return null; } }
-function guardarLocal(clave, valor) {
-  try { valor === null ? localStorage.removeItem("ga_" + clave) : localStorage.setItem("ga_" + clave, valor); } catch (e) { /* sin almacenamiento */ }
-}
+      // ── Estado ────────────────────────────────────────────────────────────
+      const estado = {
+        api: (window.API_BASE || leerLocal("api_base") || "").replace(
+          /\/$/,
+          "",
+        ),
+        token: leerLocal("token"),
+        usuario: JSON.parse(leerLocal("usuario") || "null"),
+        pestana: null,
+        ofertaAbierta: null,
+        mensaje: null,
+        cuentas: { cache: 0, dynamodb: 0, error: 0 },
+      };
+      const CLAVE_DEMO = "Demo2026*";
+      const CUENTAS_DEMO = [
+        ["Coordinación", "coordinacion@campus.example"],
+        ["Profesor · Luis Mendoza", "luis.mendoza@campus.example"],
+        ["Profesora · Nora Salas", "nora.salas@campus.example"],
+        ["Estudiante · Ana Pérez", "ana.perez@campus.example"],
+        ["Estudiante · Daniel Rojas", "daniel.rojas@campus.example"],
+      ];
 
-// ── DOM ───────────────────────────────────────────────────────────────
-const $ = (id) => document.getElementById(id);
-function h(etiqueta, atributos, ...hijos) {
-  const nodo = document.createElement(etiqueta);
-  for (const [clave, valor] of Object.entries(atributos || {})) {
-    if (valor === null || valor === undefined || valor === false) continue;
-    if (clave === "clase") nodo.className = valor;
-    else if (clave.startsWith("on")) nodo.addEventListener(clave.slice(2), valor);
-    else if (clave === "value") nodo.value = valor;
-    else nodo.setAttribute(clave, valor === true ? "" : valor);
-  }
-  for (const hijo of hijos.flat()) {
-    if (hijo === null || hijo === undefined || hijo === false) continue;
-    nodo.append(hijo.nodeType ? hijo : document.createTextNode(String(hijo)));
-  }
-  return nodo;
-}
-const esc = (texto) => String(texto).replace(/[&<>"']/g, (c) => "&#" + c.charCodeAt(0) + ";");
-const etiqueta = (texto, clase) => h("span", { clase: "etiqueta " + (clase || texto) }, texto);
-const periodo = () => $("periodo").value;
+      // localStorage puede no estar disponible: se usa solo como comodidad
+      function leerLocal(clave) {
+        try {
+          return localStorage.getItem("ga_" + clave);
+        } catch (e) {
+          return null;
+        }
+      }
+      function guardarLocal(clave, valor) {
+        try {
+          valor === null
+            ? localStorage.removeItem("ga_" + clave)
+            : localStorage.setItem("ga_" + clave, valor);
+        } catch (e) {
+          /* sin almacenamiento */
+        }
+      }
 
-// ── Cliente del API ───────────────────────────────────────────────────
-async function api(metodo, ruta, cuerpo) {
-  const cabeceras = { "Content-Type": "application/json" };
-  if (estado.token) cabeceras["Authorization"] = "Bearer " + estado.token;
-  const inicio = performance.now();
-  let status = 0, datos = {};
-  try {
-    const r = await fetch(estado.api + ruta, {
-      method: metodo, headers: cabeceras, body: cuerpo ? JSON.stringify(cuerpo) : undefined,
-    });
-    status = r.status;
-    const texto = await r.text();
-    try { datos = texto ? JSON.parse(texto) : {}; } catch (e) { datos = { error: texto.slice(0, 200) }; }
-  } catch (e) {
-    datos = { error: "No se pudo conectar con el API (" + e.message + ")" };
-  }
-  registrarTraza(metodo, ruta, status, Math.round(performance.now() - inicio), datos);
-  if (status === 401 && estado.token && !ruta.startsWith("/auth/")) cerrarSesionLocal();
-  return { ok: status >= 200 && status < 300, status, datos };
-}
+      // ── DOM ───────────────────────────────────────────────────────────────
+      const $ = (id) => document.getElementById(id);
+      function h(etiqueta, atributos, ...hijos) {
+        const nodo = document.createElement(etiqueta);
+        for (const [clave, valor] of Object.entries(atributos || {})) {
+          if (valor === null || valor === undefined || valor === false)
+            continue;
+          if (clave === "clase") nodo.className = valor;
+          else if (clave.startsWith("on"))
+            nodo.addEventListener(clave.slice(2), valor);
+          else if (clave === "value") nodo.value = valor;
+          else nodo.setAttribute(clave, valor === true ? "" : valor);
+        }
+        for (const hijo of hijos.flat()) {
+          if (hijo === null || hijo === undefined || hijo === false) continue;
+          nodo.append(
+            hijo.nodeType ? hijo : document.createTextNode(String(hijo)),
+          );
+        }
+        return nodo;
+      }
+      const esc = (texto) =>
+        String(texto).replace(/[&<>"']/g, (c) => "&#" + c.charCodeAt(0) + ";");
+      const etiqueta = (texto, clase) =>
+        h("span", { clase: "etiqueta " + (clase || texto) }, texto);
+      const periodo = () => $("periodo").value;
 
-function registrarTraza(metodo, ruta, status, ms, datos) {
-  const fuente = datos && datos._fuente;
-  if (status >= 400 || status === 0) estado.cuentas.error++;
-  else if (fuente === "cache") estado.cuentas.cache++;
-  else if (fuente === "dynamodb") estado.cuentas.dynamodb++;
-  $("cuenta-cache").textContent = "caché " + estado.cuentas.cache;
-  $("cuenta-dynamo").textContent = "dynamodb " + estado.cuentas.dynamodb;
-  $("cuenta-error").textContent = "errores " + estado.cuentas.error;
+      // ── Cliente del API ───────────────────────────────────────────────────
+      async function api(metodo, ruta, cuerpo) {
+        const cabeceras = { "Content-Type": "application/json" };
+        if (estado.token) cabeceras["Authorization"] = "Bearer " + estado.token;
+        const inicio = performance.now();
+        let status = 0,
+          datos = {};
+        try {
+          const r = await fetch(estado.api + ruta, {
+            method: metodo,
+            headers: cabeceras,
+            body: cuerpo ? JSON.stringify(cuerpo) : undefined,
+          });
+          status = r.status;
+          const texto = await r.text();
+          try {
+            datos = texto ? JSON.parse(texto) : {};
+          } catch (e) {
+            datos = { error: texto.slice(0, 200) };
+          }
+        } catch (e) {
+          datos = {
+            error: "No se pudo conectar con el API (" + e.message + ")",
+          };
+        }
+        registrarTraza(
+          metodo,
+          ruta,
+          status,
+          Math.round(performance.now() - inicio),
+          datos,
+        );
+        if (status === 401 && estado.token && !ruta.startsWith("/auth/"))
+          cerrarSesionLocal();
+        return { ok: status >= 200 && status < 300, status, datos };
+      }
 
-  const explicacion = {
-    cache: "Cache hit: respondió Redis, no se consultó DynamoDB.",
-    dynamodb: "Cache miss o lectura directa: respondió DynamoDB.",
-    redis: "Dato que vive solo en Redis (Sorted Set).",
-  }[fuente];
-  const detalle = status >= 400 || status === 0 ? (datos.error || "Error") : explicacion;
-  const fila = h("li", null,
-    h("div", { clase: "linea" },
-      h("span", { clase: "metodo" }, metodo),
-      h("span", { clase: "ruta" }, ruta),
-      h("span", { clase: "status s" + String(status)[0] }, status || "—"),
-      h("span", { clase: "ms" }, ms + " ms"),
-      fuente ? etiqueta(fuente === "cache" ? "CACHÉ" : fuente.toUpperCase(), fuente) : null),
-    detalle ? h("div", { clase: "detalle" }, detalle) : null);
-  $("traza").prepend(fila);
-  while ($("traza").children.length > 60) $("traza").lastChild.remove();
-}
+      function registrarTraza(metodo, ruta, status, ms, datos) {
+        const fuente = datos && datos._fuente;
+        if (status >= 400 || status === 0) estado.cuentas.error++;
+        else if (fuente === "cache") estado.cuentas.cache++;
+        else if (fuente === "dynamodb") estado.cuentas.dynamodb++;
+        $("cuenta-cache").textContent = "caché " + estado.cuentas.cache;
+        $("cuenta-dynamo").textContent = "dynamodb " + estado.cuentas.dynamodb;
+        $("cuenta-error").textContent = "errores " + estado.cuentas.error;
 
-// ── Sesión ────────────────────────────────────────────────────────────
-function abrirSesion(token, usuario) {
-  estado.token = token; estado.usuario = usuario; estado.pestana = null; estado.ofertaAbierta = null;
-  guardarLocal("token", token); guardarLocal("usuario", JSON.stringify(usuario));
-}
-function cerrarSesionLocal() {
-  estado.token = null; estado.usuario = null; estado.pestana = null;
-  guardarLocal("token", null); guardarLocal("usuario", null);
-  pintar();
-}
-async function entrar(email, password) {
-  const r = await api("POST", "/auth/login", { email, password });
-  if (!r.ok) return avisar(r.datos.error, true);
-  abrirSesion(r.datos.token, r.datos.usuario);
-  estado.mensaje = null;
-  pintar();
-}
-async function salir() { await api("POST", "/auth/logout"); cerrarSesionLocal(); }
+        const explicacion = {
+          cache: "Cache hit: respondió Redis, no se consultó DynamoDB.",
+          dynamodb: "Cache miss o lectura directa: respondió DynamoDB.",
+          redis: "Dato que vive solo en Redis (Sorted Set).",
+        }[fuente];
+        const detalle =
+          status >= 400 || status === 0 ? datos.error || "Error" : explicacion;
+        const fila = h(
+          "li",
+          null,
+          h(
+            "div",
+            { clase: "linea" },
+            h("span", { clase: "metodo" }, metodo),
+            h("span", { clase: "ruta" }, ruta),
+            h("span", { clase: "status s" + String(status)[0] }, status || "—"),
+            h("span", { clase: "ms" }, ms + " ms"),
+            fuente
+              ? etiqueta(
+                  fuente === "cache" ? "CACHÉ" : fuente.toUpperCase(),
+                  fuente,
+                )
+              : null,
+          ),
+          detalle ? h("div", { clase: "detalle" }, detalle) : null,
+        );
+        $("traza").prepend(fila);
+        while ($("traza").children.length > 60) $("traza").lastChild.remove();
+      }
 
-function avisar(texto, esError) { estado.mensaje = { texto, esError: !!esError }; pintar(); }
+      // ── Sesión ────────────────────────────────────────────────────────────
+      function abrirSesion(token, usuario) {
+        estado.token = token;
+        estado.usuario = usuario;
+        estado.pestana = null;
+        estado.ofertaAbierta = null;
+        guardarLocal("token", token);
+        guardarLocal("usuario", JSON.stringify(usuario));
+      }
+      function cerrarSesionLocal() {
+        estado.token = null;
+        estado.usuario = null;
+        estado.pestana = null;
+        guardarLocal("token", null);
+        guardarLocal("usuario", null);
+        pintar();
+      }
+      async function entrar(email, password) {
+        const r = await api("POST", "/auth/login", { email, password });
+        if (!r.ok) return avisar(r.datos.error, true);
+        abrirSesion(r.datos.token, r.datos.usuario);
+        estado.mensaje = null;
+        pintar();
+      }
+      async function salir() {
+        await api("POST", "/auth/logout");
+        cerrarSesionLocal();
+      }
 
-/** Ejecuta una escritura, muestra el resultado y vuelve a pintar la vista. */
-async function accion(metodo, ruta, cuerpo, exito) {
-  const r = await api(metodo, ruta, cuerpo);
-  avisar(r.ok ? exito : (r.datos.error || "No se pudo completar la operación"), !r.ok);
-}
+      function avisar(texto, esError) {
+        estado.mensaje = { texto, esError: !!esError };
+        pintar();
+      }
 
-// ── Salud ─────────────────────────────────────────────────────────────
-async function revisarSalud() {
-  const r = await api("GET", "/health");
-  const pintarPildora = (id, nombre, componente) => {
-    const ok = componente && componente.estado === "ok";
-    $(id).textContent = nombre + (ok ? " ok" : " caído");
-    $(id).className = "pildora " + (ok ? "ok" : "mal");
-  };
-  pintarPildora("salud-dynamo", "DynamoDB", r.datos.dynamodb);
-  pintarPildora("salud-redis", "Redis", r.datos.redis);
-}
+      /** Ejecuta una escritura, muestra el resultado y vuelve a pintar la vista. */
+      async function accion(metodo, ruta, cuerpo, exito) {
+        const r = await api(metodo, ruta, cuerpo);
+        avisar(
+          r.ok ? exito : r.datos.error || "No se pudo completar la operación",
+          !r.ok,
+        );
+      }
 
-// ── Vistas comunes ────────────────────────────────────────────────────
-function tarjeta(titulo, nota, ...contenido) {
-  const pie = h("p", { clase: "nota-seccion" });
-  pie.innerHTML = nota || "";      // texto fijo de este archivo; lo dinámico pasa por esc()
-  return h("div", { clase: "tarjeta" }, h("h2", null, titulo), pie, contenido);
-}
-function tabla(columnas, filas, vacio) {
-  if (!filas.length) return h("div", { clase: "vacio" }, vacio);
-  return h("table", null,
-    h("thead", null, h("tr", null, columnas.map((c) => h("th", null, c)))),
-    h("tbody", null, filas));
-}
-function cupos(oferta) {
-  const usados = oferta.cuposTotales - oferta.cuposDisponibles;
-  const barra = h("i"); barra.style.width = Math.round(100 * usados / oferta.cuposTotales) + "%";
-  return h("div", { clase: "cupos" + (oferta.cuposDisponibles === 0 ? " lleno" : "") },
-    h("span", { clase: "barra" }, barra),
-    h("span", { clase: "num" }, oferta.cuposDisponibles + " de " + oferta.cuposTotales + " libres"));
-}
+      // ── Salud ─────────────────────────────────────────────────────────────
+      async function revisarSalud() {
+        const r = await api("GET", "/health");
+        const pintarPildora = (id, nombre, componente) => {
+          const ok = componente && componente.estado === "ok";
+          $(id).textContent = nombre + (ok ? " ok" : " caído");
+          $(id).className = "pildora " + (ok ? "ok" : "mal");
+        };
+        pintarPildora("salud-dynamo", "DynamoDB", r.datos.dynamodb);
+        pintarPildora("salud-redis", "Redis", r.datos.redis);
+      }
 
-async function vistaLogin() {
-  const email = h("input", { type: "email", id: "email", autocomplete: "username", placeholder: "correo@campus.example" });
-  const clave = h("input", { type: "password", id: "clave", autocomplete: "current-password", value: CLAVE_DEMO });
-  const enviar = (e) => { e.preventDefault(); entrar(email.value, clave.value); };
-  return [
-    tarjeta("Iniciar sesión",
-      "<code>POST /auth/login</code> hace un <code>GetItem</code> de <code>EMAIL#&lt;correo&gt;</code>, valida el hash y guarda la sesión en Redis con TTL. Cinco intentos fallidos por minuto bloquean el correo (rate limiting en Redis).",
-      h("div", { clase: "cuentas" }, CUENTAS_DEMO.map(([nombre, correo]) =>
-        h("button", { clase: "accion secundaria", type: "button", onclick: () => entrar(correo, CLAVE_DEMO) }, nombre))),
-      h("form", { clase: "formulario", onsubmit: enviar },
-        h("label", null, "Correo", email), h("label", null, "Contraseña", clave),
-        h("button", { type: "submit" }, "Entrar"))),
-    await vistaDemanda(),
-  ];
-}
+      // ── Vistas comunes ────────────────────────────────────────────────────
+      function tarjeta(titulo, nota, ...contenido) {
+        const pie = h("p", { clase: "nota-seccion" });
+        pie.innerHTML = nota || ""; // texto fijo de este archivo; lo dinámico pasa por esc()
+        return h(
+          "div",
+          { clase: "tarjeta" },
+          h("h2", null, titulo),
+          pie,
+          contenido,
+        );
+      }
+      function tabla(columnas, filas, vacio) {
+        if (!filas.length) return h("div", { clase: "vacio" }, vacio);
+        return h(
+          "table",
+          null,
+          h(
+            "thead",
+            null,
+            h(
+              "tr",
+              null,
+              columnas.map((c) => h("th", null, c)),
+            ),
+          ),
+          h("tbody", null, filas),
+        );
+      }
+      function cupos(oferta) {
+        const usados = oferta.cuposTotales - oferta.cuposDisponibles;
+        const barra = h("i");
+        barra.style.width =
+          Math.round((100 * usados) / oferta.cuposTotales) + "%";
+        return h(
+          "div",
+          { clase: "cupos" + (oferta.cuposDisponibles === 0 ? " lleno" : "") },
+          h("span", { clase: "barra" }, barra),
+          h(
+            "span",
+            { clase: "num" },
+            oferta.cuposDisponibles + " de " + oferta.cuposTotales + " libres",
+          ),
+        );
+      }
 
-async function vistaDemanda() {
-  const r = await api("GET", "/periodos/" + periodo() + "/demanda?top=8");
-  const filas = (r.datos.ranking || []);
-  const maximo = Math.max(1, ...filas.map((f) => f.solicitudes));
-  const cuerpo = !r.datos.disponible
-    ? h("div", { clase: "vacio" }, "Redis no está disponible: el API responde, sin ranking.")
-    : !filas.length ? h("div", { clase: "vacio" }, "Aún no hay solicitudes en este periodo.")
-    : h("div", { clase: "ranking" }, filas.map((f) => {
-        const barra = h("i"); barra.style.width = Math.round(100 * f.solicitudes / maximo) + "%";
-        return h("div", { clase: "fila" }, h("span", { clase: "num" }, "#" + f.posicion),
-          h("strong", null, f.cursoId), h("span", { clase: "barra" }, barra),
-          h("span", { clase: "num" }, f.solicitudes));
-      }));
-  return tarjeta("Cursos más solicitados · " + periodo(),
-    "Sorted Set en Redis: cada solicitud de matrícula hace <code>ZINCRBY demanda:&lt;periodo&gt;</code>, haya cupo o no. Es una métrica que tolera pérdida, por eso no pasa por DynamoDB.",
-    cuerpo);
-}
+      async function vistaLogin() {
+        const email = h("input", {
+          type: "email",
+          id: "email",
+          autocomplete: "username",
+          placeholder: "correo@campus.example",
+        });
+        const clave = h("input", {
+          type: "password",
+          id: "clave",
+          autocomplete: "current-password",
+          value: CLAVE_DEMO,
+        });
+        const enviar = (e) => {
+          e.preventDefault();
+          entrar(email.value, clave.value);
+        };
+        return [
+          tarjeta(
+            "Iniciar sesión",
+            "<code>POST /auth/login</code> hace un <code>GetItem</code> de <code>EMAIL#&lt;correo&gt;</code>, valida el hash y guarda la sesión en Redis con TTL. Cinco intentos fallidos por minuto bloquean el correo (rate limiting en Redis).",
+            h(
+              "div",
+              { clase: "cuentas" },
+              CUENTAS_DEMO.map(([nombre, correo]) =>
+                h(
+                  "button",
+                  {
+                    clase: "accion secundaria",
+                    type: "button",
+                    onclick: () => entrar(correo, CLAVE_DEMO),
+                  },
+                  nombre,
+                ),
+              ),
+            ),
+            h(
+              "form",
+              { clase: "formulario", onsubmit: enviar },
+              h("label", null, "Correo", email),
+              h("label", null, "Contraseña", clave),
+              h("button", { type: "submit" }, "Entrar"),
+            ),
+          ),
+          await vistaDemanda(),
+        ];
+      }
 
-// ── Estudiante ────────────────────────────────────────────────────────
-async function vistaCatalogo(puedeMatricular) {
-  const id = estado.usuario.userId;
-  const [catalogo, horario] = await Promise.all([
-    api("GET", "/periodos/" + periodo() + "/ofertas"),
-    puedeMatricular ? api("GET", "/estudiantes/" + id + "/matriculas?periodo=" + periodo()) : null,
-  ]);
-  const mias = new Map(((horario && horario.datos.matriculas) || []).map((m) => [m.cursoId, m.ofertaId]));
-  const esAdmin = estado.usuario.rol === "ADMIN";
-  const filas = (catalogo.datos.ofertas || []).map((o) => {
-    let boton = null;
-    if (puedeMatricular) {
-      const yaInscrito = mias.has(o.cursoId);
-      boton = h("button", {
-        clase: "accion", disabled: yaInscrito || o.estado !== "ACTIVA",
-        onclick: () => accion("POST", "/matriculas", { ofertaId: o.ofertaId }, "Solicitud registrada en " + o.ofertaId),
-      }, mias.get(o.cursoId) === o.ofertaId ? "Inscrito" : yaInscrito ? "Ya en otro grupo" : "Matricular");
-    } else if (esAdmin) {
-      const nuevo = o.estado === "ACTIVA" ? "CERRADA" : "ACTIVA";
-      boton = h("button", { clase: "accion secundaria",
-        onclick: () => accion("PUT", "/ofertas/" + o.ofertaId + "/estado", { estado: nuevo }, o.ofertaId + " ahora está " + nuevo),
-      }, o.estado === "ACTIVA" ? "Cerrar" : "Abrir");
-    }
-    return h("tr", null,
-      h("td", null, h("strong", null, o.nombreCurso), h("br"), h("code", null, o.ofertaId)),
-      h("td", null, o.nombreProfesor), h("td", null, o.horario),
-      h("td", null, cupos(o)), h("td", null, etiqueta(o.estado)), h("td", null, boton));
-  });
-  return tarjeta("Catálogo de ofertas · " + periodo(),
-    "Query a <code>GSI2</code> con <code>GSI2PK = PERIOD#" + esc(periodo()) + "</code>. Cache-Aside con TTL de 15 s: el cupo mostrado puede ir atrasado; el cupo real lo decide la transacción de matrícula.",
-    tabla(["Curso", "Profesor", "Horario", "Cupos", "Estado", ""], filas, "No hay ofertas en este periodo."));
-}
+      async function vistaDemanda() {
+        const r = await api("GET", "/periodos/" + periodo() + "/demanda?top=8");
+        const filas = r.datos.ranking || [];
+        const maximo = Math.max(1, ...filas.map((f) => f.solicitudes));
+        const cuerpo = !r.datos.disponible
+          ? h(
+              "div",
+              { clase: "vacio" },
+              "Redis no está disponible: el API responde, sin ranking.",
+            )
+          : !filas.length
+            ? h(
+                "div",
+                { clase: "vacio" },
+                "Aún no hay solicitudes en este periodo.",
+              )
+            : h(
+                "div",
+                { clase: "ranking" },
+                filas.map((f) => {
+                  const barra = h("i");
+                  barra.style.width =
+                    Math.round((100 * f.solicitudes) / maximo) + "%";
+                  return h(
+                    "div",
+                    { clase: "fila" },
+                    h("span", { clase: "num" }, "#" + f.posicion),
+                    h("strong", null, f.cursoId),
+                    h("span", { clase: "barra" }, barra),
+                    h("span", { clase: "num" }, f.solicitudes),
+                  );
+                }),
+              );
+        return tarjeta(
+          "Cursos más solicitados · " + periodo(),
+          "Sorted Set en Redis: cada solicitud de matrícula hace <code>ZINCRBY demanda:&lt;periodo&gt;</code>, haya cupo o no. Es una métrica que tolera pérdida, por eso no pasa por DynamoDB.",
+          cuerpo,
+        );
+      }
 
-async function vistaHorario() {
-  const id = estado.usuario.userId;
-  const [r, catalogo] = await Promise.all([
-    api("GET", "/estudiantes/" + id + "/matriculas?periodo=" + periodo()),
-    api("GET", "/periodos/" + periodo() + "/ofertas"),
-  ]);
-  const filas = (r.datos.matriculas || []).map((m) => {
-    const base = "/estudiantes/" + id + "/matriculas/" + m.periodo + "/" + m.cursoId;
-    const otros = (catalogo.datos.ofertas || []).filter((o) => o.cursoId === m.cursoId && o.ofertaId !== m.ofertaId);
-    const selector = h("select", { "aria-label": "Nuevo grupo de " + m.cursoId },
-      otros.map((o) => h("option", { value: o.ofertaId }, o.grupo + " · " + o.horario)));
-    const calificada = m.nota !== undefined;
-    return h("tr", null,
-      h("td", null, h("strong", null, m.nombreCurso), h("br"), h("code", null, m.ofertaId)),
-      h("td", null, m.horario, h("br"), m.nombreProfesor),
-      h("td", { clase: "num" }, m.creditos),
-      h("td", null, etiqueta(m.estado), calificada ? h("span", { clase: "num" }, " nota " + m.nota) : null),
-      h("td", null, otros.length && !calificada ? [selector, " ",
-        h("button", { clase: "accion secundaria",
-          onclick: () => accion("PUT", base + "/grupo", { ofertaId: selector.value }, "Cambio de grupo realizado") }, "Cambiar")] : "—"),
-      h("td", null, h("button", { clase: "accion peligro", disabled: calificada,
-        onclick: () => accion("DELETE", base, null, "Matrícula de " + m.cursoId + " retirada") }, "Retirar")));
-  });
-  return tarjeta("Mi horario · " + periodo() + " · " + (r.datos.creditos || 0) + " créditos",
-    "Query por <code>PK = STUDENT#" + esc(id) + "</code> y <code>SK begins_with ENROLL#" + esc(periodo()) + "#</code>. Se cachea 5 min y se invalida al matricular, retirar o cambiar de grupo.",
-    tabla(["Curso", "Horario y profesor", "Créd.", "Estado", "Cambiar de grupo", ""], filas, "No tienes matrículas en este periodo."));
-}
+      // ── Estudiante ────────────────────────────────────────────────────────
+      async function vistaCatalogo(puedeMatricular) {
+        const id = estado.usuario.userId;
+        const [catalogo, horario] = await Promise.all([
+          api("GET", "/periodos/" + periodo() + "/ofertas"),
+          puedeMatricular
+            ? api(
+                "GET",
+                "/estudiantes/" + id + "/matriculas?periodo=" + periodo(),
+              )
+            : null,
+        ]);
+        const mias = new Map(
+          ((horario && horario.datos.matriculas) || []).map((m) => [
+            m.cursoId,
+            m.ofertaId,
+          ]),
+        );
+        const esAdmin = estado.usuario.rol === "ADMIN";
+        const filas = (catalogo.datos.ofertas || []).map((o) => {
+          let boton = null;
+          if (puedeMatricular) {
+            const yaInscrito = mias.has(o.cursoId);
+            boton = h(
+              "button",
+              {
+                clase: "accion",
+                disabled: yaInscrito || o.estado !== "ACTIVA",
+                onclick: () =>
+                  accion(
+                    "POST",
+                    "/matriculas",
+                    { ofertaId: o.ofertaId },
+                    "Solicitud registrada en " + o.ofertaId,
+                  ),
+              },
+              mias.get(o.cursoId) === o.ofertaId
+                ? "Inscrito"
+                : yaInscrito
+                  ? "Ya en otro grupo"
+                  : "Matricular",
+            );
+          } else if (esAdmin) {
+            const nuevo = o.estado === "ACTIVA" ? "CERRADA" : "ACTIVA";
+            boton = h(
+              "button",
+              {
+                clase: "accion secundaria",
+                onclick: () =>
+                  accion(
+                    "PUT",
+                    "/ofertas/" + o.ofertaId + "/estado",
+                    { estado: nuevo },
+                    o.ofertaId + " ahora está " + nuevo,
+                  ),
+              },
+              o.estado === "ACTIVA" ? "Cerrar" : "Abrir",
+            );
+          }
+          return h(
+            "tr",
+            null,
+            h(
+              "td",
+              null,
+              h("strong", null, o.nombreCurso),
+              h("br"),
+              h("code", null, o.ofertaId),
+            ),
+            h("td", null, o.nombreProfesor),
+            h("td", null, o.horario),
+            h("td", null, cupos(o)),
+            h("td", null, etiqueta(o.estado)),
+            h("td", null, boton),
+          );
+        });
+        return tarjeta(
+          "Catálogo de ofertas · " + periodo(),
+          "Query a <code>GSI2</code> con <code>GSI2PK = PERIOD#" +
+            esc(periodo()) +
+            "</code>. Cache-Aside con TTL de 15 s: el cupo mostrado puede ir atrasado; el cupo real lo decide la transacción de matrícula.",
+          tabla(
+            ["Curso", "Profesor", "Horario", "Cupos", "Estado", ""],
+            filas,
+            "No hay ofertas en este periodo.",
+          ),
+        );
+      }
 
-async function vistaNotas() {
-  const r = await api("GET", "/estudiantes/" + estado.usuario.userId + "/notas");
-  const filas = (r.datos.notas || []).map((n) => h("tr", null,
-    h("td", { clase: "num" }, h("strong", null, Number(n.nota).toFixed(2))),
-    h("td", null, n.nombreCurso), h("td", { clase: "num" }, n.periodo), h("td", { clase: "num" }, n.creditos)));
-  return tarjeta("Mis notas · promedio ponderado " + (r.datos.promedio ?? "—"),
-    "Query a <code>LSI1</code> con <code>ScanIndexForward=false</code>: la llave <code>GRADE#&lt;nota×100&gt;</code> las trae de mayor a menor. Índice disperso: solo entran las matrículas calificadas.",
-    tabla(["Nota", "Curso", "Periodo", "Créd."], filas, "Aún no tienes cursos calificados."));
-}
+      async function vistaHorario() {
+        const id = estado.usuario.userId;
+        const [r, catalogo] = await Promise.all([
+          api("GET", "/estudiantes/" + id + "/matriculas?periodo=" + periodo()),
+          api("GET", "/periodos/" + periodo() + "/ofertas"),
+        ]);
+        const filas = (r.datos.matriculas || []).map((m) => {
+          const base =
+            "/estudiantes/" + id + "/matriculas/" + m.periodo + "/" + m.cursoId;
+          const otros = (catalogo.datos.ofertas || []).filter(
+            (o) => o.cursoId === m.cursoId && o.ofertaId !== m.ofertaId,
+          );
+          const selector = h(
+            "select",
+            { "aria-label": "Nuevo grupo de " + m.cursoId },
+            otros.map((o) =>
+              h("option", { value: o.ofertaId }, o.grupo + " · " + o.horario),
+            ),
+          );
+          const calificada = m.nota !== undefined;
+          return h(
+            "tr",
+            null,
+            h(
+              "td",
+              null,
+              h("strong", null, m.nombreCurso),
+              h("br"),
+              h("code", null, m.ofertaId),
+            ),
+            h("td", null, m.horario, h("br"), m.nombreProfesor),
+            h("td", { clase: "num" }, m.creditos),
+            h(
+              "td",
+              null,
+              etiqueta(m.estado),
+              calificada
+                ? h("span", { clase: "num" }, " nota " + m.nota)
+                : null,
+            ),
+            h(
+              "td",
+              null,
+              otros.length && !calificada
+                ? [
+                    selector,
+                    " ",
+                    h(
+                      "button",
+                      {
+                        clase: "accion secundaria",
+                        onclick: () =>
+                          accion(
+                            "PUT",
+                            base + "/grupo",
+                            { ofertaId: selector.value },
+                            "Cambio de grupo realizado",
+                          ),
+                      },
+                      "Cambiar",
+                    ),
+                  ]
+                : "—",
+            ),
+            h(
+              "td",
+              null,
+              h(
+                "button",
+                {
+                  clase: "accion peligro",
+                  disabled: calificada,
+                  onclick: () =>
+                    accion(
+                      "DELETE",
+                      base,
+                      null,
+                      "Matrícula de " + m.cursoId + " retirada",
+                    ),
+                },
+                "Retirar",
+              ),
+            ),
+          );
+        });
+        return tarjeta(
+          "Mi horario · " +
+            periodo() +
+            " · " +
+            (r.datos.creditos || 0) +
+            " créditos",
+          "Query por <code>PK = STUDENT#" +
+            esc(id) +
+            "</code> y <code>SK begins_with ENROLL#" +
+            esc(periodo()) +
+            "#</code>. Se cachea 5 min y se invalida al matricular, retirar o cambiar de grupo.",
+          tabla(
+            [
+              "Curso",
+              "Horario y profesor",
+              "Créd.",
+              "Estado",
+              "Cambiar de grupo",
+              "",
+            ],
+            filas,
+            "No tienes matrículas en este periodo.",
+          ),
+        );
+      }
 
-// ── Profesor ──────────────────────────────────────────────────────────
-function filaEstudiante(m, oferta) {
-  const base = "/estudiantes/" + m.studentId + "/matriculas/" + oferta.periodo + "/" + oferta.cursoId;
-  const nota = h("input", { clase: "nota", type: "number", min: "0", max: "5", step: "0.1",
-    value: m.nota ?? "", "aria-label": "Nota de " + m.nombreEstudiante });
-  const pendiente = m.estado === "PENDIENTE";
-  return h("tr", null,
-    h("td", null, h("strong", null, m.nombreEstudiante), h("br"), h("code", null, m.studentId)),
-    h("td", null, etiqueta(m.estado)),
-    h("td", null, pendiente
-      ? [h("button", { clase: "accion", onclick: () => accion("POST", base + "/aprobar", null, "Matrícula de " + m.nombreEstudiante + " aprobada") }, "Aprobar"), " ",
-         h("button", { clase: "accion peligro", onclick: () => accion("DELETE", base, null, "Solicitud de " + m.nombreEstudiante + " rechazada") }, "Rechazar")]
-      : [nota, " ", h("button", { clase: "accion secundaria",
-          onclick: () => accion("PUT", base + "/nota", { nota: Number(nota.value) }, "Nota guardada para " + m.nombreEstudiante) }, "Calificar")]));
-}
+      async function vistaNotas() {
+        const r = await api(
+          "GET",
+          "/estudiantes/" + estado.usuario.userId + "/notas",
+        );
+        const filas = (r.datos.notas || []).map((n) =>
+          h(
+            "tr",
+            null,
+            h(
+              "td",
+              { clase: "num" },
+              h("strong", null, Number(n.nota).toFixed(2)),
+            ),
+            h("td", null, n.nombreCurso),
+            h("td", { clase: "num" }, n.periodo),
+            h("td", { clase: "num" }, n.creditos),
+          ),
+        );
+        return tarjeta(
+          "Mis notas · promedio ponderado " + (r.datos.promedio ?? "—"),
+          "Query a <code>LSI1</code> con <code>ScanIndexForward=false</code>: la llave <code>GRADE#&lt;nota×100&gt;</code> las trae de mayor a menor. Índice disperso: solo entran las matrículas calificadas.",
+          tabla(
+            ["Nota", "Curso", "Periodo", "Créd."],
+            filas,
+            "Aún no tienes cursos calificados.",
+          ),
+        );
+      }
 
-async function vistaMisOfertas() {
-  const r = await api("GET", "/profesores/" + estado.usuario.userId + "/ofertas?periodo=" + periodo());
-  const ofertas = r.datos.ofertas || [];
-  const filas = ofertas.map((o) => h("tr", null,
-    h("td", null, h("strong", null, o.nombreCurso), h("br"), h("code", null, o.ofertaId)),
-    h("td", null, o.horario), h("td", null, cupos(o)),
-    h("td", null, h("button", { clase: "accion secundaria",
-      onclick: () => { estado.ofertaAbierta = o.ofertaId; estado.mensaje = null; pintar(); } }, "Ver lista de clase"))));
-  const bloques = [tarjeta("Ofertas que dicto · " + periodo(),
-    "Query a <code>GSI1</code> con <code>GSI1PK = PROF#" + esc(estado.usuario.userId) + "</code> y <code>GSI1SK begins_with PERIOD#" + esc(periodo()) + "#</code>.",
-    tabla(["Curso", "Horario", "Cupos", ""], filas, "No dictas ofertas en este periodo."))];
-  if (estado.ofertaAbierta && ofertas.some((o) => o.ofertaId === estado.ofertaAbierta)) {
-    bloques.push(await vistaListaClase(estado.ofertaAbierta));
-  }
-  return bloques;
-}
+      // ── Profesor ──────────────────────────────────────────────────────────
+      function filaEstudiante(m, oferta) {
+        const base =
+          "/estudiantes/" +
+          m.studentId +
+          "/matriculas/" +
+          oferta.periodo +
+          "/" +
+          oferta.cursoId;
+        const nota = h("input", {
+          clase: "nota",
+          type: "number",
+          min: "0",
+          max: "5",
+          step: "0.1",
+          value: m.nota ?? "",
+          "aria-label": "Nota de " + m.nombreEstudiante,
+        });
+        const pendiente = m.estado === "PENDIENTE";
+        return h(
+          "tr",
+          null,
+          h(
+            "td",
+            null,
+            h("strong", null, m.nombreEstudiante),
+            h("br"),
+            h("code", null, m.studentId),
+          ),
+          h("td", null, etiqueta(m.estado)),
+          h(
+            "td",
+            null,
+            pendiente
+              ? [
+                  h(
+                    "button",
+                    {
+                      clase: "accion",
+                      onclick: () =>
+                        accion(
+                          "POST",
+                          base + "/aprobar",
+                          null,
+                          "Matrícula de " + m.nombreEstudiante + " aprobada",
+                        ),
+                    },
+                    "Aprobar",
+                  ),
+                  " ",
+                  h(
+                    "button",
+                    {
+                      clase: "accion peligro",
+                      onclick: () =>
+                        accion(
+                          "DELETE",
+                          base,
+                          null,
+                          "Solicitud de " + m.nombreEstudiante + " rechazada",
+                        ),
+                    },
+                    "Rechazar",
+                  ),
+                ]
+              : [
+                  nota,
+                  " ",
+                  h(
+                    "button",
+                    {
+                      clase: "accion secundaria",
+                      onclick: () =>
+                        accion(
+                          "PUT",
+                          base + "/nota",
+                          { nota: Number(nota.value) },
+                          "Nota guardada para " + m.nombreEstudiante,
+                        ),
+                    },
+                    "Calificar",
+                  ),
+                ],
+          ),
+        );
+      }
 
-async function vistaListaClase(ofertaId) {
-  const r = await api("GET", "/ofertas/" + ofertaId + "/estudiantes");
-  if (!r.ok) return tarjeta("Lista de clase", "", h("div", { clase: "mensaje error" }, r.datos.error));
-  const filas = (r.datos.estudiantes || []).map((m) => filaEstudiante(m, r.datos.oferta));
-  return tarjeta("Lista de clase · " + ofertaId,
-    "Primero un <code>GetItem</code> consistente de la oferta para autorizar al profesor; luego Query al <code>GSI1</code> con <code>GSI1PK = OFFER#" + esc(ofertaId) + "</code>. El nombre del estudiante viene copiado en la matrícula: no hay N+1.",
-    tabla(["Estudiante", "Estado", "Acción"], filas, "Nadie se ha matriculado en esta oferta."));
-}
+      async function vistaMisOfertas() {
+        const r = await api(
+          "GET",
+          "/profesores/" +
+            estado.usuario.userId +
+            "/ofertas?periodo=" +
+            periodo(),
+        );
+        const ofertas = r.datos.ofertas || [];
+        const filas = ofertas.map((o) =>
+          h(
+            "tr",
+            null,
+            h(
+              "td",
+              null,
+              h("strong", null, o.nombreCurso),
+              h("br"),
+              h("code", null, o.ofertaId),
+            ),
+            h("td", null, o.horario),
+            h("td", null, cupos(o)),
+            h(
+              "td",
+              null,
+              h(
+                "button",
+                {
+                  clase: "accion secundaria",
+                  onclick: () => {
+                    estado.ofertaAbierta = o.ofertaId;
+                    estado.mensaje = null;
+                    pintar();
+                  },
+                },
+                "Ver lista de clase",
+              ),
+            ),
+          ),
+        );
+        const bloques = [
+          tarjeta(
+            "Ofertas que dicto · " + periodo(),
+            "Query a <code>GSI1</code> con <code>GSI1PK = PROF#" +
+              esc(estado.usuario.userId) +
+              "</code> y <code>GSI1SK begins_with PERIOD#" +
+              esc(periodo()) +
+              "#</code>.",
+            tabla(
+              ["Curso", "Horario", "Cupos", ""],
+              filas,
+              "No dictas ofertas en este periodo.",
+            ),
+          ),
+        ];
+        if (
+          estado.ofertaAbierta &&
+          ofertas.some((o) => o.ofertaId === estado.ofertaAbierta)
+        ) {
+          bloques.push(await vistaListaClase(estado.ofertaAbierta));
+        }
+        return bloques;
+      }
 
-// ── Coordinación ──────────────────────────────────────────────────────
-async function vistaPendientes() {
-  const r = await api("GET", "/periodos/" + periodo() + "/matriculas/pendientes");
-  const filas = (r.datos.pendientes || []).map((m) => {
-    const base = "/estudiantes/" + m.studentId + "/matriculas/" + m.periodo + "/" + m.cursoId;
-    return h("tr", null,
-      h("td", { clase: "num" }, (m.fechaSolicitud || "").replace("T", " ").slice(0, 19)),
-      h("td", null, h("strong", null, m.nombreEstudiante), h("br"), h("code", null, m.studentId)),
-      h("td", null, m.nombreCurso, h("br"), h("code", null, m.ofertaId)),
-      h("td", null,
-        h("button", { clase: "accion", onclick: () => accion("POST", base + "/aprobar", null, "Matrícula aprobada: sale del índice de pendientes") }, "Aprobar"), " ",
-        h("button", { clase: "accion peligro", onclick: () => accion("DELETE", base, null, "Solicitud rechazada: se devolvió el cupo") }, "Rechazar")));
-  });
-  return tarjeta("Matrículas pendientes · " + periodo(),
-    "Query a <code>GSI2</code> con <code>GSI2SK begins_with PENDING#</code>, en orden de solicitud. Índice disperso: al aprobar se hace <code>REMOVE GSI2PK, GSI2SK</code> y la matrícula sale de la cola. No se cachea.",
-    tabla(["Solicitada (UTC)", "Estudiante", "Curso", ""], filas, "No hay solicitudes pendientes."));
-}
+      async function vistaListaClase(ofertaId) {
+        const r = await api("GET", "/ofertas/" + ofertaId + "/estudiantes");
+        if (!r.ok)
+          return tarjeta(
+            "Lista de clase",
+            "",
+            h("div", { clase: "mensaje error" }, r.datos.error),
+          );
+        const filas = (r.datos.estudiantes || []).map((m) =>
+          filaEstudiante(m, r.datos.oferta),
+        );
+        return tarjeta(
+          "Lista de clase · " + ofertaId,
+          "Primero un <code>GetItem</code> consistente de la oferta para autorizar al profesor; luego Query al <code>GSI1</code> con <code>GSI1PK = OFFER#" +
+            esc(ofertaId) +
+            "</code>. El nombre del estudiante viene copiado en la matrícula: no hay N+1.",
+          tabla(
+            ["Estudiante", "Estado", "Acción"],
+            filas,
+            "Nadie se ha matriculado en esta oferta.",
+          ),
+        );
+      }
 
-function campo(nombre, texto, atributos) {
-  return h("label", null, texto, h("input", Object.assign({ name: nombre, required: true }, atributos || {})));
-}
-function vistaCrear() {
-  const crearCurso = (e) => {
-    e.preventDefault(); const f = new FormData(e.target);
-    accion("POST", "/cursos", { cursoId: f.get("cursoId"), nombre: f.get("nombre"), creditos: Number(f.get("creditos")) },
-      "Curso " + String(f.get("cursoId")).toUpperCase() + " creado");
-  };
-  const crearOferta = (e) => {
-    e.preventDefault(); const f = new FormData(e.target);
-    accion("POST", "/cursos/" + String(f.get("cursoId")).toUpperCase() + "/ofertas", {
-      periodo: f.get("periodo"), grupo: f.get("grupo"), profesorId: f.get("profesorId"),
-      horario: f.get("horario"), cupos: Number(f.get("cupos")), requiereAprobacion: f.get("aprobacion") === "si",
-    }, "Oferta creada: se invalidó el catálogo en caché");
-  };
-  return [
-    tarjeta("Crear curso", "<code>PutItem</code> condicional en <code>COURSE#&lt;id&gt; / METADATA</code>.",
-      h("form", { clase: "formulario", onsubmit: crearCurso },
-        campo("cursoId", "Código", { placeholder: "QUI101", pattern: "[A-Za-z0-9]{2,12}" }),
-        campo("nombre", "Nombre", { placeholder: "Química General" }),
-        campo("creditos", "Créditos", { type: "number", min: "1", max: "20", value: "3" }),
-        h("button", { type: "submit" }, "Crear curso"))),
-    tarjeta("Crear oferta", "La oferta comparte la partición del curso (<code>COURSE#&lt;id&gt; / OFFER#&lt;periodo&gt;#&lt;ofertaId&gt;</code>) y entra a <code>GSI1</code> y <code>GSI2</code>.",
-      h("form", { clase: "formulario", onsubmit: crearOferta },
-        campo("cursoId", "Curso", { placeholder: "MAT101" }),
-        campo("periodo", "Periodo", { value: periodo(), pattern: "\\d{4}-[1-9]" }),
-        campo("grupo", "Grupo", { placeholder: "G3", pattern: "[A-Za-z0-9]{1,6}" }),
-        campo("profesorId", "Id del profesor", { placeholder: "P1001" }),
-        campo("horario", "Horario", { placeholder: "Sáb 8:00-12:00" }),
-        campo("cupos", "Cupos", { type: "number", min: "1", max: "500", value: "3" }),
-        h("label", null, "Requiere aprobación", h("select", { name: "aprobacion" },
-          h("option", { value: "si" }, "Sí"), h("option", { value: "no" }, "No"))),
-        h("button", { type: "submit" }, "Crear oferta"))),
-  ];
-}
+      // ── Coordinación ──────────────────────────────────────────────────────
+      async function vistaPendientes() {
+        const r = await api(
+          "GET",
+          "/periodos/" + periodo() + "/matriculas/pendientes",
+        );
+        const filas = (r.datos.pendientes || []).map((m) => {
+          const base =
+            "/estudiantes/" +
+            m.studentId +
+            "/matriculas/" +
+            m.periodo +
+            "/" +
+            m.cursoId;
+          return h(
+            "tr",
+            null,
+            h(
+              "td",
+              { clase: "num" },
+              (m.fechaSolicitud || "").replace("T", " ").slice(0, 19),
+            ),
+            h(
+              "td",
+              null,
+              h("strong", null, m.nombreEstudiante),
+              h("br"),
+              h("code", null, m.studentId),
+            ),
+            h("td", null, m.nombreCurso, h("br"), h("code", null, m.ofertaId)),
+            h(
+              "td",
+              null,
+              h(
+                "button",
+                {
+                  clase: "accion",
+                  onclick: () =>
+                    accion(
+                      "POST",
+                      base + "/aprobar",
+                      null,
+                      "Matrícula aprobada: sale del índice de pendientes",
+                    ),
+                },
+                "Aprobar",
+              ),
+              " ",
+              h(
+                "button",
+                {
+                  clase: "accion peligro",
+                  onclick: () =>
+                    accion(
+                      "DELETE",
+                      base,
+                      null,
+                      "Solicitud rechazada: se devolvió el cupo",
+                    ),
+                },
+                "Rechazar",
+              ),
+            ),
+          );
+        });
+        return tarjeta(
+          "Matrículas pendientes · " + periodo(),
+          "Query a <code>GSI2</code> con <code>GSI2SK begins_with PENDING#</code>, en orden de solicitud. Índice disperso: al aprobar se hace <code>REMOVE GSI2PK, GSI2SK</code> y la matrícula sale de la cola. No se cachea.",
+          tabla(
+            ["Solicitada (UTC)", "Estudiante", "Curso", ""],
+            filas,
+            "No hay solicitudes pendientes.",
+          ),
+        );
+      }
 
-// ── Composición ───────────────────────────────────────────────────────
-const PESTANAS = {
-  STUDENT: [["Catálogo", () => vistaCatalogo(true)], ["Mi horario", vistaHorario], ["Mis notas", vistaNotas], ["Demanda", vistaDemanda]],
-  PROFESSOR: [["Mis ofertas", vistaMisOfertas], ["Catálogo", () => vistaCatalogo(false)], ["Demanda", vistaDemanda]],
-  ADMIN: [["Pendientes", vistaPendientes], ["Catálogo", () => vistaCatalogo(false)], ["Crear", vistaCrear], ["Demanda", vistaDemanda]],
-};
-const NOMBRE_ROL = { STUDENT: "Estudiante", PROFESSOR: "Profesor", ADMIN: "Coordinación" };
+      function campo(nombre, texto, atributos) {
+        return h(
+          "label",
+          null,
+          texto,
+          h(
+            "input",
+            Object.assign({ name: nombre, required: true }, atributos || {}),
+          ),
+        );
+      }
+      function vistaCrear() {
+        const crearCurso = (e) => {
+          e.preventDefault();
+          const f = new FormData(e.target);
+          accion(
+            "POST",
+            "/cursos",
+            {
+              cursoId: f.get("cursoId"),
+              nombre: f.get("nombre"),
+              creditos: Number(f.get("creditos")),
+            },
+            "Curso " + String(f.get("cursoId")).toUpperCase() + " creado",
+          );
+        };
+        const crearOferta = (e) => {
+          e.preventDefault();
+          const f = new FormData(e.target);
+          accion(
+            "POST",
+            "/cursos/" + String(f.get("cursoId")).toUpperCase() + "/ofertas",
+            {
+              periodo: f.get("periodo"),
+              grupo: f.get("grupo"),
+              profesorId: f.get("profesorId"),
+              horario: f.get("horario"),
+              cupos: Number(f.get("cupos")),
+              requiereAprobacion: f.get("aprobacion") === "si",
+            },
+            "Oferta creada: se invalidó el catálogo en caché",
+          );
+        };
+        return [
+          tarjeta(
+            "Crear curso",
+            "<code>PutItem</code> condicional en <code>COURSE#&lt;id&gt; / METADATA</code>.",
+            h(
+              "form",
+              { clase: "formulario", onsubmit: crearCurso },
+              campo("cursoId", "Código", {
+                placeholder: "QUI101",
+                pattern: "[A-Za-z0-9]{2,12}",
+              }),
+              campo("nombre", "Nombre", { placeholder: "Química General" }),
+              campo("creditos", "Créditos", {
+                type: "number",
+                min: "1",
+                max: "20",
+                value: "3",
+              }),
+              h("button", { type: "submit" }, "Crear curso"),
+            ),
+          ),
+          tarjeta(
+            "Crear oferta",
+            "La oferta comparte la partición del curso (<code>COURSE#&lt;id&gt; / OFFER#&lt;periodo&gt;#&lt;ofertaId&gt;</code>) y entra a <code>GSI1</code> y <code>GSI2</code>.",
+            h(
+              "form",
+              { clase: "formulario", onsubmit: crearOferta },
+              campo("cursoId", "Curso", { placeholder: "MAT101" }),
+              campo("periodo", "Periodo", {
+                value: periodo(),
+                pattern: "\\d{4}-[1-9]",
+              }),
+              campo("grupo", "Grupo", {
+                placeholder: "G3",
+                pattern: "[A-Za-z0-9]{1,6}",
+              }),
+              campo("profesorId", "Id del profesor", { placeholder: "P1001" }),
+              campo("horario", "Horario", { placeholder: "Sáb 8:00-12:00" }),
+              campo("cupos", "Cupos", {
+                type: "number",
+                min: "1",
+                max: "500",
+                value: "3",
+              }),
+              h(
+                "label",
+                null,
+                "Requiere aprobación",
+                h(
+                  "select",
+                  { name: "aprobacion" },
+                  h("option", { value: "si" }, "Sí"),
+                  h("option", { value: "no" }, "No"),
+                ),
+              ),
+              h("button", { type: "submit" }, "Crear oferta"),
+            ),
+          ),
+        ];
+      }
 
-let turno = 0;
-async function pintar() {
-  const miTurno = ++turno;
-  const contenido = $("contenido");
-  $("aviso-simulacion").hidden = !window.MODO_SIMULACION;
-  $("salir").hidden = !estado.usuario;
-  $("usuario").textContent = estado.usuario ? estado.usuario.nombre + " · " + NOMBRE_ROL[estado.usuario.rol] : "";
+      // ── Composición ───────────────────────────────────────────────────────
+      const PESTANAS = {
+        STUDENT: [
+          ["Catálogo", () => vistaCatalogo(true)],
+          ["Mi horario", vistaHorario],
+          ["Mis notas", vistaNotas],
+          ["Demanda", vistaDemanda],
+        ],
+        PROFESSOR: [
+          ["Mis ofertas", vistaMisOfertas],
+          ["Catálogo", () => vistaCatalogo(false)],
+          ["Demanda", vistaDemanda],
+        ],
+        ADMIN: [
+          ["Pendientes", vistaPendientes],
+          ["Catálogo", () => vistaCatalogo(false)],
+          ["Crear", vistaCrear],
+          ["Demanda", vistaDemanda],
+        ],
+      };
+      const NOMBRE_ROL = {
+        STUDENT: "Estudiante",
+        PROFESSOR: "Profesor",
+        ADMIN: "Coordinación",
+      };
 
-  const bloques = [];
-  if (!estado.api) {
-    const url = h("input", { type: "url", placeholder: "http://localhost:4566/restapis/<api-id>/prod/_user_request_" });
-    bloques.push(tarjeta("Conectar con el API",
-      "No se encontró <code>config.js</code>. Ejecuta <code>python scripts/seed.py</code> dentro de <code>cdk-dev</code> o pega aquí la URL base del API.",
-      h("form", { clase: "formulario", onsubmit: (e) => { e.preventDefault(); estado.api = url.value.replace(/\/$/, ""); guardarLocal("api_base", estado.api); revisarSalud(); pintar(); } },
-        h("label", null, "URL base", url), h("button", { type: "submit" }, "Conectar"))));
-  } else {
-    if (estado.mensaje) bloques.push(h("div", { clase: "mensaje " + (estado.mensaje.esError ? "error" : "ok"), role: "status" }, estado.mensaje.texto));
-    if (!estado.usuario) {
-      bloques.push(...await vistaLogin());
-    } else {
-      const pestanas = PESTANAS[estado.usuario.rol];
-      if (!pestanas.some(([nombre]) => nombre === estado.pestana)) estado.pestana = pestanas[0][0];
-      bloques.push(h("nav", { clase: "pestanas" }, pestanas.map(([nombre]) =>
-        h("button", { clase: nombre === estado.pestana ? "activa" : "", onclick: () => { estado.pestana = nombre; estado.mensaje = null; pintar(); } }, nombre))));
-      const vista = pestanas.find(([nombre]) => nombre === estado.pestana)[1];
-      bloques.push(...[await vista()].flat());
-    }
-  }
-  if (miTurno !== turno) return;      // otra acción repintó mientras se cargaba esta
-  contenido.replaceChildren(...bloques);
-}
+      let turno = 0;
+      async function pintar() {
+        const miTurno = ++turno;
+        const contenido = $("contenido");
+        $("aviso-simulacion").hidden = !window.MODO_SIMULACION;
+        $("salir").hidden = !estado.usuario;
+        $("usuario").textContent = estado.usuario
+          ? estado.usuario.nombre + " · " + NOMBRE_ROL[estado.usuario.rol]
+          : "";
 
-$("salir").addEventListener("click", salir);
-$("periodo").addEventListener("change", () => { estado.ofertaAbierta = null; estado.mensaje = null; pintar(); });
-$("limpiar-traza").addEventListener("click", () => {
-  $("traza").replaceChildren(); estado.cuentas = { cache: 0, dynamodb: 0, error: 0 };
-  ["cuenta-cache", "cuenta-dynamo", "cuenta-error"].forEach((id, i) => { $(id).textContent = ["caché", "dynamodb", "errores"][i] + " 0"; });
-});
+        const bloques = [];
+        if (!estado.api) {
+          const url = h("input", {
+            type: "url",
+            placeholder:
+              "http://localhost:4566/restapis/<api-id>/prod/_user_request_",
+          });
+          bloques.push(
+            tarjeta(
+              "Conectar con el API",
+              "No se encontró <code>config.js</code>. Ejecuta <code>python scripts/seed.py</code> dentro de <code>cdk-dev</code> o pega aquí la URL base del API.",
+              h(
+                "form",
+                {
+                  clase: "formulario",
+                  onsubmit: (e) => {
+                    e.preventDefault();
+                    estado.api = url.value.replace(/\/$/, "");
+                    guardarLocal("api_base", estado.api);
+                    revisarSalud();
+                    pintar();
+                  },
+                },
+                h("label", null, "URL base", url),
+                h("button", { type: "submit" }, "Conectar"),
+              ),
+            ),
+          );
+        } else {
+          if (estado.mensaje)
+            bloques.push(
+              h(
+                "div",
+                {
+                  clase: "mensaje " + (estado.mensaje.esError ? "error" : "ok"),
+                  role: "status",
+                },
+                estado.mensaje.texto,
+              ),
+            );
+          if (!estado.usuario) {
+            bloques.push(...(await vistaLogin()));
+          } else {
+            const pestanas = PESTANAS[estado.usuario.rol];
+            if (!pestanas.some(([nombre]) => nombre === estado.pestana))
+              estado.pestana = pestanas[0][0];
+            bloques.push(
+              h(
+                "nav",
+                { clase: "pestanas" },
+                pestanas.map(([nombre]) =>
+                  h(
+                    "button",
+                    {
+                      clase: nombre === estado.pestana ? "activa" : "",
+                      onclick: () => {
+                        estado.pestana = nombre;
+                        estado.mensaje = null;
+                        pintar();
+                      },
+                    },
+                    nombre,
+                  ),
+                ),
+              ),
+            );
+            const vista = pestanas.find(
+              ([nombre]) => nombre === estado.pestana,
+            )[1];
+            bloques.push(...[await vista()].flat());
+          }
+        }
+        if (miTurno !== turno) return; // otra acción repintó mientras se cargaba esta
+        contenido.replaceChildren(...bloques);
+      }
 
-if (estado.api) revisarSalud();
-pintar();
-</script>
-</body>
+      $("salir").addEventListener("click", salir);
+      $("periodo").addEventListener("change", () => {
+        estado.ofertaAbierta = null;
+        estado.mensaje = null;
+        pintar();
+      });
+      $("limpiar-traza").addEventListener("click", () => {
+        $("traza").replaceChildren();
+        estado.cuentas = { cache: 0, dynamodb: 0, error: 0 };
+        ["cuenta-cache", "cuenta-dynamo", "cuenta-error"].forEach((id, i) => {
+          $(id).textContent = ["caché", "dynamodb", "errores"][i] + " 0";
+        });
+      });
+
+      if (estado.api) revisarSalud();
+      pintar();
+    </script>
+  </body>
 </html>
